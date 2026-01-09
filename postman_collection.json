@@ -1,0 +1,228 @@
+{
+  "info": {
+    "name": "OX Group NestJS API",
+    "description": "API collection for OX Group test task with authentication, company management, and products",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:4000/api",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "company_id",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "1. Login (Generate OTP)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save OTP from response for next request",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('otp_code', jsonData.otp);",
+                  "    pm.environment.set('user_email', jsonData.email);",
+                  "    console.log('OTP saved:', jsonData.otp);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Login with email. Creates user if not exists and returns OTP code (valid for 5 minutes)."
+          },
+          "response": []
+        },
+        {
+          "name": "2. Verify OTP (Get JWT Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save access token for authenticated requests",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.collectionVariables.set('access_token', jsonData.access_token);",
+                  "    console.log('Access token saved');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{user_email}}\",\n  \"otp\": \"{{otp_code}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/verify",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "verify"]
+            },
+            "description": "Verify OTP code and receive JWT access token. OTP expires after 5 minutes."
+          },
+          "response": []
+        }
+      ],
+      "description": "OTP-based authentication endpoints"
+    },
+    {
+      "name": "Company Management",
+      "item": [
+        {
+          "name": "3. Register Company (OX Integration)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Save company ID for delete operation",
+                  "if (pm.response.code === 200 || pm.response.code === 201) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.company && jsonData.company.id) {",
+                  "        pm.collectionVariables.set('company_id', jsonData.company.id);",
+                  "        console.log('Company ID saved:', jsonData.company.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"Bearer YOUR_OX_TOKEN_HERE\",\n  \"subdomain\": \"demo\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/register-company",
+              "host": ["{{base_url}}"],
+              "path": ["register-company"]
+            },
+            "description": "Register a company from OX system. Validates token with OX API /profile endpoint.\n\nBehavior:\n- If company doesn't exist: Creates it and assigns user as ADMIN\n- If company exists: Adds user as MANAGER\n\nRequires: JWT Bearer token"
+          },
+          "response": []
+        },
+        {
+          "name": "4. Delete Company (Admin Only)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/company/{{company_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["company", "{{company_id}}"]
+            },
+            "description": "Delete a company. Only the admin who created the company can delete it.\n\nRequires:\n- JWT Bearer token\n- User must be ADMIN of the company\n- Company must have been created by the current user"
+          },
+          "response": []
+        }
+      ],
+      "description": "Company registration and management with OX API integration"
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "5. Get Products (Manager Only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/products?page=1&size=10",
+              "host": ["{{base_url}}"],
+              "path": ["products"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "description": "Page number (starts from 1)"
+                },
+                {
+                  "key": "size",
+                  "value": "10",
+                  "description": "Items per page (max 20)"
+                }
+              ]
+            },
+            "description": "Fetch products from OX API /variations endpoint.\n\nRequires:\n- JWT Bearer token\n- User must have MANAGER role\n- User must be associated with a company\n\nConstraints:\n- Max size: 20\n- Returns 400 if size > 20"
+          },
+          "response": []
+        }
+      ],
+      "description": "Product listing from OX API with role-based access control"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  }
+}
